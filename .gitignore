@@ -5,3 +5,6 @@ __pycache__
 *.npz
 kitti_data
 models
+.idea/
+assets/test_image_depth.npy
+assets/test_image_disp.jpeg
