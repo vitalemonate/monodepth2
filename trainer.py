@@ -32,6 +32,7 @@ class Trainer:
         self.log_path = os.path.join(self.opt.log_dir, self.opt.model_name)
 
         # checking height and width are multiples of 32
+        #  默认大小为640×192
         assert self.opt.height % 32 == 0, "'height' must be a multiple of 32"
         assert self.opt.width % 32 == 0, "'width' must be a multiple of 32"
 
@@ -40,7 +41,10 @@ class Trainer:
 
         self.device = torch.device("cpu" if self.opt.no_cuda else "cuda")
 
+        # "scales used in the loss"
         self.num_scales = len(self.opt.scales)
+
+        # 默认[0, -1, 1], target 对应id为0
         self.num_input_frames = len(self.opt.frame_ids)
         self.num_pose_frames = 2 if self.opt.pose_model_input == "pairs" else self.num_input_frames
 
@@ -51,6 +55,7 @@ class Trainer:
         if self.opt.use_stereo:
             self.opt.frame_ids.append("s")
 
+        # self.opt.num_layers为encoder部分resnet的深度，默认使用ResNet-18
         self.models["encoder"] = networks.ResnetEncoder(
             self.opt.num_layers, self.opt.weights_init == "pretrained")
         self.models["encoder"].to(self.device)
@@ -61,7 +66,10 @@ class Trainer:
         self.models["depth"].to(self.device)
         self.parameters_to_train += list(self.models["depth"].parameters())
 
+        # 三种posenet的处理办法，在论文中的Supplementary Material的Table中有对比结果，
+        # 从表中的结果来看，separate_resnet效果最好
         if self.use_pose_net:
+            # 和depth encoder不共享参数
             if self.opt.pose_model_type == "separate_resnet":
                 self.models["pose_encoder"] = networks.ResnetEncoder(
                     self.opt.num_layers,
@@ -76,10 +84,13 @@ class Trainer:
                     num_input_features=1,
                     num_frames_to_predict_for=2)
 
+            # 和depth encoder共享参数
             elif self.opt.pose_model_type == "shared":
                 self.models["pose"] = networks.PoseDecoder(
                     self.models["encoder"].num_ch_enc, self.num_pose_frames)
 
+            # posecnn为 Learning Depth from Monocular Videos using Direct Methods 中提出的方法，
+            # 参考https://arxiv.org/pdf/1712.00175.pdf
             elif self.opt.pose_model_type == "posecnn":
                 self.models["pose"] = networks.PoseCNN(
                     self.num_input_frames if self.opt.pose_model_input == "all" else 2)
@@ -87,6 +98,7 @@ class Trainer:
             self.models["pose"].to(self.device)
             self.parameters_to_train += list(self.models["pose"].parameters())
 
+        # 这个mask对应的是sfmlearner的mask
         if self.opt.predictive_mask:
             assert self.opt.disable_automasking, \
                 "When using predictive_mask, please disable automasking with --disable_automasking"
@@ -142,6 +154,7 @@ class Trainer:
         for mode in ["train", "val"]:
             self.writers[mode] = SummaryWriter(os.path.join(self.log_path, mode))
 
+        # if set, disables ssim in the loss
         if not self.opt.no_ssim:
             self.ssim = SSIM()
             self.ssim.to(self.device)
