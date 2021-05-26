@@ -360,6 +360,7 @@ class Trainer:
             if self.opt.v1_multiscale:
                 source_scale = scale
             else:
+                # 使用双线性插值的方法将各个尺度的视差图上采样到输入图像的尺寸
                 disp = F.interpolate(
                     disp, [self.opt.height, self.opt.width], mode="bilinear", align_corners=False)
                 source_scale = 0
