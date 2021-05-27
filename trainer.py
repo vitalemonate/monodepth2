@@ -516,6 +516,7 @@ class Trainer:
         so is only used to give an indication of validation performance
         """
         depth_pred = outputs[("depth", 0, 0)]
+        # 将预测的深度图上采样至375×1242(KITTI RAW数据集的图像尺寸)，再限制范围到0.001～80
         depth_pred = torch.clamp(F.interpolate(
             depth_pred, [375, 1242], mode="bilinear", align_corners=False), 1e-3, 80)
         depth_pred = depth_pred.detach()
@@ -525,15 +526,17 @@ class Trainer:
 
         # garg/eigen crop
         crop_mask = torch.zeros_like(mask)
+        # 取375×1242中的218×1153块
         crop_mask[:, :, 153:371, 44:1197] = 1
         mask = mask * crop_mask
 
         depth_gt = depth_gt[mask]
         depth_pred = depth_pred[mask]
+        # 尺度因子: groundtruth的均值与predict depth map的均值的比值
         depth_pred *= torch.median(depth_gt) / torch.median(depth_pred)
 
         depth_pred = torch.clamp(depth_pred, min=1e-3, max=80)
-
+        # depth_errors有四个指标
         depth_errors = compute_depth_errors(depth_gt, depth_pred)
 
         for i, metric in enumerate(self.depth_metric_names):

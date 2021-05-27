@@ -145,6 +145,8 @@ def evaluate(opt):
         print("-> Evaluation disabled. Done.")
         quit()
 
+    # Because no ground truth is available for the new KITTI depth benchmark,
+    # no scores will be reported when --eval_split benchmark is set.
     elif opt.eval_split == 'benchmark':
         save_dir = os.path.join(opt.load_weights_folder, "benchmark_predictions")
         print("-> Saving out benchmark predictions to {}".format(save_dir))
@@ -204,6 +206,7 @@ def evaluate(opt):
 
         pred_depth *= opt.pred_depth_scale_factor
         if not opt.disable_median_scaling:
+            # 尺度因子: groundtruth的均值与predict depth map的均值的比值
             ratio = np.median(gt_depth) / np.median(pred_depth)
             ratios.append(ratio)
             pred_depth *= ratio
