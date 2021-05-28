@@ -137,9 +137,11 @@ class MonoDataset(data.Dataset):
         """
         inputs = {}
 
+        # 随机进行数据增强(p=0.5)
         do_color_aug = self.is_train and random.random() > 0.5
         do_flip = self.is_train and random.random() > 0.5
 
+        # example: 2011_09_26/2011_09_26_drive_0022_sync 473 r
         line = self.filenames[index].split()
         folder = line[0]
 
@@ -153,6 +155,9 @@ class MonoDataset(data.Dataset):
         else:
             side = None
 
+        # frame_idxs 默认为 [0, -1, 1]
+        # ("color", <frame_id>, <scale>)
+        # scale = -1 表示原图
         for i in self.frame_idxs:
             if i == "s":
                 other_side = {"r": "l", "l": "r"}[side]
@@ -161,6 +166,7 @@ class MonoDataset(data.Dataset):
                 inputs[("color", i, -1)] = self.get_color(folder, frame_index + i, side, do_flip)
 
         # adjusting intrinsics to match each scale in the pyramid
+        # ("K", scale) and ("inv_K", scale)
         for scale in range(self.num_scales):
             K = self.K.copy()
 

@@ -71,8 +71,8 @@ class Trainer:
         # 从表中的结果来看，separate_resnet效果最好，默认选取separate_resnet
         if self.use_pose_net:
             # 和depth encoder不共享参数
-            # encoder部分将两张图像在通道维度堆叠为6个通道，输出一个features
-            # decoder部分输入一个features，输出两个pose
+            # pose encoder部分将两张图像在通道维度堆叠为6个通道，输出一个features
+            # pose decoder部分输入一个features，输出两个pose
             if self.opt.pose_model_type == "separate_resnet":
                 self.models["pose_encoder"] = networks.ResnetEncoder(
                     self.opt.num_layers,
