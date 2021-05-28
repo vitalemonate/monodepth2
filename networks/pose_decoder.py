@@ -34,6 +34,8 @@ class PoseDecoder(nn.Module):
         self.net = nn.ModuleList(list(self.convs.values()))
 
     def forward(self, input_features):
+        # input_features是encoder得到的一个batch的features
+        # 对于batch中的每个features，只用最后一个尺度的features
         last_features = [f[-1] for f in input_features]
 
         cat_features = [self.relu(self.convs["squeeze"](f)) for f in last_features]
@@ -47,6 +49,7 @@ class PoseDecoder(nn.Module):
 
         out = out.mean(3).mean(2)
 
+        # follow "Learning depth from monocular videos using direct methods" 的方法对旋转和尺度都乘0.01
         out = 0.01 * out.view(-1, self.num_frames_to_predict_for, 1, 6)
 
         axisangle = out[..., :3]

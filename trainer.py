@@ -68,11 +68,11 @@ class Trainer:
         self.parameters_to_train += list(self.models["depth"].parameters())
 
         # 三种posenet的处理办法，在论文中的Supplementary Material的Table中有对比结果，
-        # 从表中的结果来看，separate_resnet效果最好
+        # 从表中的结果来看，separate_resnet效果最好，默认选取separate_resnet
         if self.use_pose_net:
             # 和depth encoder不共享参数
-            # encoder部分输入两张图像，输出一个features
-            # decoder部分输入一个features，输出两帧之间的相对位姿
+            # encoder部分将两张图像在通道维度堆叠为6个通道，输出一个features
+            # decoder部分输入一个features，输出两个pose
             if self.opt.pose_model_type == "separate_resnet":
                 self.models["pose_encoder"] = networks.ResnetEncoder(
                     self.opt.num_layers,
@@ -88,6 +88,8 @@ class Trainer:
                     num_frames_to_predict_for=2)
 
             # 和depth encoder共享参数
+            # encoder部分分别输入一张图像（类似孪生网络）
+            # decoder部分输入两个features，输出一个pose
             elif self.opt.pose_model_type == "shared":
                 self.models["pose"] = networks.PoseDecoder(
                     self.models["encoder"].num_ch_enc, self.num_pose_frames)
