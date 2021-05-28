@@ -21,9 +21,13 @@ class DepthDecoder(nn.Module):
         self.num_output_channels = num_output_channels
         self.use_skips = use_skips
         self.upsample_mode = 'nearest'
+        # 多尺度计算loss， scales=[0, 1, 2, 3]
+        # decoder部分从上到下分别是0, 1, 2, 3, 4
         self.scales = scales
 
+        # encoder部分的channels, num_ch_enc = np.array([64, 64, 128, 256, 512])
         self.num_ch_enc = num_ch_enc
+        # decoder部分的channels，这个通道顺序是按decoder网络由上到下来排列的
         self.num_ch_dec = np.array([16, 32, 64, 128, 256])
 
         # decoder
@@ -45,6 +49,7 @@ class DepthDecoder(nn.Module):
             self.convs[("dispconv", s)] = Conv3x3(self.num_ch_dec[s], self.num_output_channels)
 
         self.decoder = nn.ModuleList(list(self.convs.values()))
+        # 类似于monodepth，将输出的视差图的范围限制在0~1之间
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, input_features):

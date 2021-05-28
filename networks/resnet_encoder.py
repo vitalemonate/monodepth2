@@ -14,6 +14,7 @@ import torchvision.models as models
 import torch.utils.model_zoo as model_zoo
 
 
+# 继承models.ResNet，只修改了__init__函数，将输入的通道数由3改为num_input_images * 3
 class ResNetMultiImageInput(models.ResNet):
     """Constructs a resnet model with varying number of input images.
     Adapted from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
@@ -21,6 +22,7 @@ class ResNetMultiImageInput(models.ResNet):
     def __init__(self, block, layers, num_classes=1000, num_input_images=1):
         super(ResNetMultiImageInput, self).__init__(block, layers)
         self.inplanes = 64
+        # 如果depth encoder和pose encoder不共享参数，那么num_input_images就是2
         self.conv1 = nn.Conv2d(
             num_input_images * 3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -53,12 +55,15 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1):
 
     if pretrained:
         loaded = model_zoo.load_url(models.resnet.model_urls['resnet{}'.format(num_layers)])
+        # 1.输入图像数量翻倍，网络第一个卷积层也要翻倍，新增加的部分由原有的参数中拷贝得到，
+        # 2.将扩展后的卷积核的值除2，使得扩展前后卷积核的数值范围不变
         loaded['conv1.weight'] = torch.cat(
             [loaded['conv1.weight']] * num_input_images, 1) / num_input_images
         model.load_state_dict(loaded)
     return model
 
 
+# 一个标准的resnet
 class ResnetEncoder(nn.Module):
     """Pytorch module for a resnet encoder
     """

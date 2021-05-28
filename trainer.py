@@ -56,6 +56,7 @@ class Trainer:
             self.opt.frame_ids.append("s")
 
         # self.opt.num_layers为encoder部分resnet的深度，默认使用ResNet-18
+        # 输出5个尺度的features
         self.models["encoder"] = networks.ResnetEncoder(
             self.opt.num_layers, self.opt.weights_init == "pretrained")
         self.models["encoder"].to(self.device)
@@ -70,6 +71,8 @@ class Trainer:
         # 从表中的结果来看，separate_resnet效果最好
         if self.use_pose_net:
             # 和depth encoder不共享参数
+            # encoder部分输入两张图像，输出一个features
+            # decoder部分输入一个features，输出两帧之间的相对位姿
             if self.opt.pose_model_type == "separate_resnet":
                 self.models["pose_encoder"] = networks.ResnetEncoder(
                     self.opt.num_layers,
