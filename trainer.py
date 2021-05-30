@@ -145,14 +145,14 @@ class Trainer:
             self.opt.data_path, train_filenames, self.opt.height, self.opt.width,
             self.opt.frame_ids, 4, is_train=True, img_ext=img_ext)
         self.train_loader = DataLoader(
-            train_dataset, self.opt.batch_size, True,
-            num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
+            train_dataset, self.opt.batch_size,
+            True, num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
         val_dataset = self.dataset(
             self.opt.data_path, val_filenames, self.opt.height, self.opt.width,
             self.opt.frame_ids, 4, is_train=False, img_ext=img_ext)
         self.val_loader = DataLoader(
-            val_dataset, self.opt.batch_size, True,
-            num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
+            val_dataset, self.opt.batch_size,
+            True, num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
         self.val_iter = iter(self.val_loader)
 
         self.writers = {}
@@ -183,6 +183,7 @@ class Trainer:
         print("There are {:d} training items and {:d} validation items\n".format(
             len(train_dataset), len(val_dataset)))
 
+        # save options
         self.save_opts()
 
     def set_train(self):
@@ -219,7 +220,6 @@ class Trainer:
         for batch_idx, inputs in enumerate(self.train_loader):
 
             before_op_time = time.time()
-
             outputs, losses = self.process_batch(inputs)
 
             self.model_optimizer.zero_grad()
@@ -252,23 +252,41 @@ class Trainer:
         if self.opt.pose_model_type == "shared":
             # If we are using a shared encoder for both depth and pose (as advocated
             # in monodepthv1), then all images are fed separately through the depth encoder.
+            # 将一个batch内的所有帧拼接， 以batch size=2为例，先将batch内的图像按a,b,c,d,e,f的顺序拼接在一起送入encoder
+            # 输入的网络的图像的size为(6,3,192,640)
+            #       frame_id=0  frame_id=-1  frame_id=1
+            # batch      a           c           e
+            # size=2     b           d           f
             all_color_aug = torch.cat([inputs[("color_aug", i, 0)] for i in self.opt.frame_ids])
+            print(f"all_color_aug size is {all_color_aug.size()}")
             all_features = self.models["encoder"](all_color_aug)
+            # encoder的输出为[f(a), f(b), f(c), f(d), f(e), f(f)]，
+            # 然后将一个batch内的features按batch size切分为[[f(a), f(b)], [f(c), f(d)], [f(e), f(f)]]
             all_features = [torch.split(f, self.opt.batch_size) for f in all_features]
 
+            # 将一个batch内的features按照frame_ids整合
+            #       frame_id=0  frame_id=-1  frame_id=1
+            #       features[0] features[-1] features[1]
+            # batch    f(a)          f(c)       f(e)
+            # size=2   f(b)          f(d)       f(f)
+            # features[0] = [f(a), f(b)], features[-1] = [f(c), f(d)], features[1] = [f(e), f(f)]
             features = {}
             for i, k in enumerate(self.opt.frame_ids):
                 features[k] = [f[i] for f in all_features]
 
+            # 只向depth decoder中送入frame_id=0的features
             outputs = self.models["depth"](features[0])
         else:
             # Otherwise, we only feed the image with frame_id 0 through the depth encoder
+            # input --> depth encoder --> features --> depth decoder --> outputs
             features = self.models["encoder"](inputs["color_aug", 0, 0])
             outputs = self.models["depth"](features)
 
         if self.opt.predictive_mask:
             outputs["predictive_mask"] = self.models["predictive_mask"](features)
 
+        # features是encoder的输出
+        # 如果pose CNN和depth CNN共享encoder的话, features就会在predict_poses函数中传给pose decoder网络，否则不会被使用
         if self.use_pose_net:
             outputs.update(self.predict_poses(inputs, features))
 
@@ -287,8 +305,10 @@ class Trainer:
 
             # select what features the pose network takes as input
             if self.opt.pose_model_type == "shared":
+                # 将batch内的features按frame_id分开
                 pose_feats = {f_i: features[f_i] for f_i in self.opt.frame_ids}
             else:
+                # 如果不共享的话pose_feats输入的就是图像
                 pose_feats = {f_i: inputs["color_aug", f_i, 0] for f_i in self.opt.frame_ids}
 
             for f_i in self.opt.frame_ids[1:]:
@@ -300,11 +320,22 @@ class Trainer:
                         pose_inputs = [pose_feats[0], pose_feats[f_i]]
 
                     if self.opt.pose_model_type == "separate_resnet":
+                        # 将图像在通道维度拼接并送入pose encoder网络，大小为[batch_size, 6, 192, 640]
                         pose_inputs = [self.models["pose_encoder"](torch.cat(pose_inputs, 1))]
+                        print(f"len of pose_inputs is {len(pose_inputs)}")
                     elif self.opt.pose_model_type == "posecnn":
                         pose_inputs = torch.cat(pose_inputs, 1)
 
+                    # 不管encoder部分如何处理，都要将输出的features送入到pose decoder网络中
+                    # * 如果pose cnn和depth cnn不共享encoder时, axisangle和translation的大小是[batch_size, 2, 1, 3]
+                    # 可以在接下来的代码中看到最终的输出cam_T_cam用的是第一个通道的axisangle和translation
+                    # * 如果二者共享，则axisangle和translation的大小是[batch_size, 1, 1, 3]
                     axisangle, translation = self.models["pose"](pose_inputs)
+                    print(f"axisange size is {axisangle.size()}")
+                    print(f"translation size is {translation.size()}")
+
+                    print(f"axisangle is {axisangle}")
+                    print(f"translation is {translation}")
                     outputs[("axisangle", 0, f_i)] = axisangle
                     outputs[("translation", 0, f_i)] = translation
 
@@ -370,6 +401,7 @@ class Trainer:
                     disp, [self.opt.height, self.opt.width], mode="bilinear", align_corners=False)
                 source_scale = 0
 
+            # 先将网络输出的视差上采样到输入网络的图像大小再转换为深度图
             _, depth = disp_to_depth(disp, self.opt.min_depth, self.opt.max_depth)
 
             outputs[("depth", 0, scale)] = depth
@@ -383,7 +415,6 @@ class Trainer:
 
                 # from the authors of https://arxiv.org/abs/1712.00175
                 if self.opt.pose_model_type == "posecnn":
-
                     axisangle = outputs[("axisangle", 0, frame_id)]
                     translation = outputs[("translation", 0, frame_id)]
 
@@ -393,6 +424,7 @@ class Trainer:
                     T = transformation_from_parameters(
                         axisangle[:, 0], translation[:, 0] * mean_inv_depth[:, 0], frame_id < 0)
 
+                # 深度图转换为点云
                 cam_points = self.backproject_depth[source_scale](
                     depth, inputs[("inv_K", source_scale)])
                 pix_coords = self.project_3d[source_scale](
@@ -439,6 +471,7 @@ class Trainer:
                 source_scale = 0
 
             disp = outputs[("disp", scale)]
+            # frame_id = 0
             color = inputs[("color", 0, scale)]
             target = inputs[("color", 0, source_scale)]
 
@@ -455,6 +488,8 @@ class Trainer:
                     identity_reprojection_losses.append(
                         self.compute_reprojection_loss(pred, target))
 
+                # 拼接后的identity_reprojection_losses的大小为[batch_size, 2, 192, 640]
+                # 其中2代表target image与两个source image计算loss
                 identity_reprojection_losses = torch.cat(identity_reprojection_losses, 1)
 
                 if self.opt.avg_reprojection:
@@ -488,15 +523,23 @@ class Trainer:
                     identity_reprojection_loss.shape).cuda() * 0.00001
 
                 combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
+                print(f"combined.shape is {combined.shape}")
+
             else:
                 combined = reprojection_loss
 
             if combined.shape[1] == 1:
                 to_optimise = combined
             else:
+                # TODO:
+                # 这里关于auto-mask的实现和论文中是不一致的
+                # 按照论文中的意思，reprojection_loss中对应位置小于identity_reprojection_loss的loss应该舍弃，即mask是一个二进制的mask
+                # 但是在代码实现的时候，只是取了reprojection_loss和identity_reprojection_loss的最小值，
+                # 即本应该丢弃的部分reprojection_loss用identity_reprojection_loss的值替代了
                 to_optimise, idxs = torch.min(combined, dim=1)
 
             if not self.opt.disable_automasking:
+                # idxs > identity_reprojection_loss.shape[1] - 1 这个条件就是不满足mask条件的情况
                 outputs["identity_selection/{}".format(scale)] = (
                     idxs > identity_reprojection_loss.shape[1] - 1).float()
 

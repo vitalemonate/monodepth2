@@ -94,10 +94,12 @@ class MonoDataset(data.Dataset):
         images in this item. This ensures that all images input to the pose network receive the
         same augmentation.
         """
+        # k对应的是inputs的key: ("color", <frame_id>, <scale>)
         for k in list(inputs):
             frame = inputs[k]
             if "color" in k:
                 n, im, i = k
+                # num_scales=4
                 for i in range(self.num_scales):
                     inputs[(n, im, i)] = self.resize[i](inputs[(n, im, i - 1)])
 
@@ -184,6 +186,8 @@ class MonoDataset(data.Dataset):
         else:
             color_aug = (lambda x: x)
 
+        # 1.将输入的图像(scale=-1)resize到网络输入要求的大小(scale=0)并进行下采样，得到scale=0, 1, 2, 3这四个尺度的图像
+        # 2.对图像进行数据增强
         self.preprocess(inputs, color_aug)
 
         for i in self.frame_idxs:

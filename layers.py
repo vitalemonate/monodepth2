@@ -232,9 +232,14 @@ class SSIM(nn.Module):
         self.C2 = 0.03 ** 2
 
     def forward(self, x, y):
+        # 对图像进行padding为1的镜像边界填充
         x = self.refl(x)
         y = self.refl(y)
 
+        # SSIM计算过程参考：https://zhuanlan.zhihu.com/p/50757421
+        # 遍历图像中的每个3×3窗口，
+        # 计算x,y方向的均值，方差，进而计算窗口内SSIM值
+        # 最后对所有的小窗口的SSIM值求均值得到两帧图像的SSIM值
         mu_x = self.mu_x_pool(x)
         mu_y = self.mu_y_pool(y)
 
