@@ -212,7 +212,7 @@ class Trainer:
     def run_epoch(self):
         """Run a single epoch of training and validation
         """
-        self.model_lr_scheduler.step()
+        # self.model_lr_scheduler.step()
 
         print("Training")
         self.set_train()
@@ -242,6 +242,7 @@ class Trainer:
                 self.val()
 
             self.step += 1
+        self.model_lr_scheduler.step()
 
     def process_batch(self, inputs):
         """Pass a minibatch through the network and generate images and losses
@@ -258,7 +259,7 @@ class Trainer:
             # batch      a           c           e
             # size=2     b           d           f
             all_color_aug = torch.cat([inputs[("color_aug", i, 0)] for i in self.opt.frame_ids])
-            print(f"all_color_aug size is {all_color_aug.size()}")
+            # print(f"all_color_aug size is {all_color_aug.size()}")
             all_features = self.models["encoder"](all_color_aug)
             # encoder的输出为[f(a), f(b), f(c), f(d), f(e), f(f)]，
             # 然后将一个batch内的features按batch size切分为[[f(a), f(b)], [f(c), f(d)], [f(e), f(f)]]
@@ -322,7 +323,7 @@ class Trainer:
                     if self.opt.pose_model_type == "separate_resnet":
                         # 将图像在通道维度拼接并送入pose encoder网络，大小为[batch_size, 6, 192, 640]
                         pose_inputs = [self.models["pose_encoder"](torch.cat(pose_inputs, 1))]
-                        print(f"len of pose_inputs is {len(pose_inputs)}")
+                        # print(f"len of pose_inputs is {len(pose_inputs)}")
                     elif self.opt.pose_model_type == "posecnn":
                         pose_inputs = torch.cat(pose_inputs, 1)
 
@@ -331,11 +332,11 @@ class Trainer:
                     # 可以在接下来的代码中看到最终的输出cam_T_cam用的是第一个通道的axisangle和translation
                     # * 如果二者共享，则axisangle和translation的大小是[batch_size, 1, 1, 3]
                     axisangle, translation = self.models["pose"](pose_inputs)
-                    print(f"axisange size is {axisangle.size()}")
-                    print(f"translation size is {translation.size()}")
-
-                    print(f"axisangle is {axisangle}")
-                    print(f"translation is {translation}")
+                    # print(f"axisange size is {axisangle.size()}")
+                    # print(f"translation size is {translation.size()}")
+                    #
+                    # print(f"axisangle is {axisangle}")
+                    # print(f"translation is {translation}")
                     outputs[("axisangle", 0, f_i)] = axisangle
                     outputs[("translation", 0, f_i)] = translation
 
@@ -523,7 +524,7 @@ class Trainer:
                     identity_reprojection_loss.shape).cuda() * 0.00001
 
                 combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
-                print(f"combined.shape is {combined.shape}")
+                # print(f"combined.shape is {combined.shape}")
 
             else:
                 combined = reprojection_loss
